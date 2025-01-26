@@ -290,3 +290,55 @@ console.log(myDog.getEnergy()); // 90
 | 메모리 효율성 | 클로저 때문에 GC 가 안 될 가능성이 존재                               | `WeakMap` 의 특성으로 참조가 사라지게 되면 즉시 GC                                                                                    |
 | 상속구조      | 진정한 상속이 아닌 객체들의 조합 방식                                 | JS의 클래스 상속 메커니즘을 온전히 사용 가능                                                                                          |
 | 확장성        | 부모의 비공개 상태에 접근하기 힘들기 때문에 새로운 기능 추가에 제한적 | 클래스 상속 메커니즘을 활용하고 있기 때문에 `WeakMap` 을 통해서 부모의 비공개 상태에도 접근이 가능하기 때문에 새로운 기능 추가에 용이 |
+
+### 노출 모듈 패턴
+
+공개 변수나 메서드에 접근하기 위해서는 비공개 속성들과 공개 속성들을 서로 다른 스코프에 정의하여 사용하여 코드의 가독성이 좋지 않은 문제점이 존재했다.
+
+```js
+const Calculator = (function () {
+  // 비공개
+  let result = 0;
+
+  // 외부로 공개할 메소드
+  return {
+    add: function (num) {
+      result += num;
+    },
+    subtract: function (num) {
+      result -= num;
+    },
+    getResult: function () {
+      return result;
+    },
+  };
+})();
+```
+
+위와 같이 해도 문제가 없지만 `return` 되는 부분에 내부 로직이 섞여있어 속성들이 많아지는 경우에는 가독성이 떨어질 수 있다.
+
+```js
+const Calculator = (function () {
+  // 비공개 공개 모두 해당 영역에다가 정의
+  let result = 0;
+
+  function add(num) {
+    result += num;
+  }
+
+  function subtract(num) {
+    result -= num;
+  }
+
+  function getResult() {
+    return result;
+  }
+
+  // 마지막에 공개할 메서드들을 명시적으로 노출
+  return {
+    add: add,
+    subtract: subtract,
+    getResult: getResult,
+  };
+})();
+```
