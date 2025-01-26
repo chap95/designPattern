@@ -110,3 +110,183 @@ const testCounter2 = new CounterModule();
 testCounter.increment();
 testCounter2.increment();
 ```
+
+위와 같이 `WeakMap` 을 활용하게 되면 여러개의 객체를 class 의 인스턴스로 생성하여 각 인스턴스마다 상태를 개별적으로 관리가 가능하며 `WeakMap` 의 특성을 활용하여 참조되지 않는 속성들은 메모리에서 해제가 가능하다.
+
+> ##### 클로저 패턴을 사용하면은 인스턴스화 시킬 수 있는데 굳이 `WeakMap` 을 사용한 패턴이 좋은 이유가 무엇일까?
+
+물론 아래와 같은 형태로도 `WeakMap` 을 어느 정도는 대체할 수 있음, 하지만 가비지 컬렉션이나 상속이 `WeakMap` 을 사용할 때 보다는 불편하다는 단점이 존재
+
+```js
+const createPerson = (initialName, initialAge) => {
+  let name = initialName;
+  let age = initialAge;
+
+  return {
+    getName: () => name,
+    getAge: () => age,
+    setName: (newName) => {
+      name = newName;
+    },
+  };
+};
+```
+
+- 클로저 패턴 코드의 GC
+
+```js
+let person = createPerson("John", 30);
+person = null;
+// 클로저로 인해서 name, age 가 즉시 GC 되지 않을 수 있음
+// 따라서 reset 과 같은 추가적인 메소드가 필요함
+
+const createPerson = (initialName, initialAge) => {
+  let name = initialName;
+  let age = initialAge;
+
+  return {
+    getName: () => name,
+    getAge: () => age,
+    setName: (newName) => {
+      name = newName;
+    },
+    reset: () => {
+      name = null;
+      age = null;
+    },
+  };
+};
+```
+
+- `WeakMap` 패턴의 GC
+
+```js
+const _privateData = new WeakMap();
+
+class Person {
+  constructor(name, age) {
+    _privateData.set(this, {
+      name: name,
+      age: age,
+    });
+  }
+
+  getName() {
+    return _privateData.get(this).name;
+  }
+}
+
+let person = new Person("John", 30);
+// person 객체에 대한 참조가 없어지면
+person = null;
+// WeakMap의 특성으로 인해 관련된 비공개 데이터도
+// 자동으로 가비지 컬렉션의 대상이 됩니다
+```
+
+- 클로저 패턴 코드의 상속
+
+```js
+// 부모 "클래스" 생성 함수
+const createAnimal = (name) => {
+  // 비공개 변수
+  let energy = 100;
+
+  return {
+    getName: () => name,
+    getEnergy: () => energy,
+    eat: (amount) => {
+      energy += amount;
+    },
+  };
+};
+
+// 자식 "클래스" 생성 함수
+const createDog = (name, breed) => {
+  // 부모의 기능을 가져옴
+  const animal = createAnimal(name);
+
+  // 새로운 비공개 변수
+  let dogEnergy = animal.getEnergy(); // 부모의 비공개 변수에 직접 접근 불가
+
+  return {
+    ...animal, // 부모의 메서드들을 복사
+    getBreed: () => breed,
+    bark: () => {
+      dogEnergy -= 10; // 부모의 energy 변수가 아닌 새로운 변수 사용
+    },
+  };
+};
+
+// 사용 예시
+const myDog = createDog("Rex", "Golden Retriever");
+console.log(myDog.getName()); // "Rex"
+myDog.bark(); // energy 가 createAnimal 에도 존재하 createDog 에도 존재하는 상황, 각각 독립적으로 존재함
+```
+
+- `WeakMap` 패턴에서의 상속
+
+```js
+// 부모 클래스의 비공개 데이터를 위한 WeakMap
+const _animalData = new WeakMap();
+
+class Animal {
+  constructor(name) {
+    // WeakMap에 인스턴스별 비공개 데이터 저장
+    _animalData.set(this, {
+      name: name,
+      energy: 100,
+    });
+  }
+
+  getName() {
+    return _animalData.get(this).name;
+  }
+
+  getEnergy() {
+    return _animalData.get(this).energy;
+  }
+
+  eat(amount) {
+    const data = _animalData.get(this);
+    data.energy += amount;
+    _animalData.set(this, data);
+  }
+}
+
+// 자식 클래스의 비공개 데이터를 위한 WeakMap
+const _dogData = new WeakMap();
+
+class Dog extends Animal {
+  constructor(name, breed) {
+    super(name); // 부모 클래스의 constructor 호출
+
+    // 자식 클래스만의 비공개 데이터 저장
+    _dogData.set(this, {
+      breed: breed,
+    });
+  }
+
+  getBreed() {
+    return _dogData.get(this).breed;
+  }
+
+  bark() {
+    const animalData = _animalData.get(this);
+    animalData.energy -= 10;
+    _animalData.set(this, animalData);
+  }
+}
+
+// 사용 예시
+const myDog = new Dog("Rex", "Golden Retriever");
+console.log(myDog.getName()); // "Rex"
+myDog.bark();
+console.log(myDog.getEnergy()); // 90
+```
+
+| 구분          | 클로저 패턴                                                           | `WeakMap` 패턴                                                                                                                        |
+| ------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 상태관리      | 각 인스턴스가 자신만의 새로운 상태 복사본을 보유                      | 상태가 `WeakMap` 에 중앙 집중식으로 저장이 되며, 실제 상속 관계가 유지됨                                                              |
+| 메모리 효율성 | 클로저 때문에 GC 가 안 될 가능성이 존재                               | `WeakMap` 의 특성으로 참조가 사라지게 되면 즉시 GC                                                                                    |
+| 상속구조      | 진정한 상속이 아닌 객체들의 조합 방식                                 | JS의 클래스 상속 메커니즘을 온전히 사용 가능                                                                                          |
+| 확장성        | 부모의 비공개 상태에 접근하기 힘들기 때문에 새로운 기능 추가에 제한적 | 클래스 상속 메커니즘을 활용하고 있기 때문에 `WeakMap` 을 통해서 부모의 비공개 상태에도 접근이 가능하기 때문에 새로운 기능 추가에 용이 |
